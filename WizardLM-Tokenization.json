@@ -1,0 +1,241 @@
+[
+    {
+        "id": "4b48f7dae69eb174",
+        "type": "comment",
+        "z": "50ed45470ea01d88",
+        "name": "WizardLM Tokenization",
+        "info": "",
+        "x": 1440,
+        "y": 1340,
+        "wires": []
+    },
+    {
+        "id": "16b419295c964fa5",
+        "type": "http in",
+        "z": "50ed45470ea01d88",
+        "name": "[get] /wizardlm-tokenization",
+        "url": "/mac-mini-m1.local/wizardlm-tokenization",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 1460,
+        "y": 1400,
+        "wires": [
+            [
+                "84c4539458b06fde"
+            ]
+        ]
+    },
+    {
+        "id": "5f40be3d2f87e296",
+        "type": "function",
+        "z": "50ed45470ea01d88",
+        "name": "WizardLM Tokenization",
+        "func": "(async () => {\n  let Prompt = (msg.payload || '').trim()\n  if (Prompt === '') {\n    msg.payload = 'empty or missing prompt'\n    node.send([null,msg])\n    return\n  }\n  \n/**** retrieve settings or provide defaults ****/\n\n  let Threads = parseInt(msg.threads,10)\n  if (isNaN(Threads)) { Threads = 4 }\n  Threads = Math.max(1,Threads)\n  Threads = Math.min(Threads,Math.max(1,os.cpus().length))\n\n  let Context = parseInt(msg.context,10)\n  if (isNaN(Context)) { Context = 512 }\n  Context = Math.max(0,Math.min(Context,2048))\n\n  Prompt = Prompt.replace(/\"/g,'\\\\\"')\n\n/**** combine all these settings into a command ****/\n\n  let Command = ( 'cd ai && ' +\n    './llama-tokenization --model ./ggml-wizardlm-7b-q4_0.bin --mlock ' +\n    ' --ctx_size ' + Context + \n    ' --threads ' + Threads +\n    ' --prompt \"' + Prompt + '\"'\n  )\n\n/**** extract actual reponse from command output ****/\n\n  function ResponseFrom (Text) {\n    let HeaderLength = Text.indexOf('system_info')\n    Text = Text.slice(HeaderLength + 1)\n      .replace(/^[^\\n]*\\n/,'')\n\n    let TrailerIndex = Text.indexOf('\\n\\nllama_print_timings')\n    Text = Text.slice(0,TrailerIndex)\n\n    return Text\n  }\n\n/**** now calculate embeddings for the given prompt ****/\n  \n  let { stdout,stderr, StatusCode,Signal } = child_process.spawnSync(\n    'bash', [], { input:Command }\n  )\n  \n  stdout = stdout.toString().trim()\n  stderr = stderr.toString().trim()\n\n  switch (true) {\n    case (StatusCode == null):\n    case (StatusCode === 0):\n      msg.statusCode = (stdout === '' ? 204 : 200)\n      msg.payload    = ResponseFrom(stdout)\n      break\n    default:\n      msg.statusCode = 500 + StatusCode\n      msg.payload    = (stdout === '' ? '' : '>>>> stdout >>>>\\n' + stdout + '\\n') +\n                       '>>>> stderr >>>>\\n' + stderr +\n                       (Signal == null ? '' : '\\n' + Signal)\n      break\n  }\n\n  node.send([msg,null])\n})()\n",
+        "outputs": 2,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [
+            {
+                "var": "os",
+                "module": "os"
+            },
+            {
+                "var": "child_process",
+                "module": "child_process"
+            }
+        ],
+        "x": 1650,
+        "y": 1460,
+        "wires": [
+            [
+                "f82c27b884788eaf",
+                "9a1ff75964be917c"
+            ],
+            [
+                "efdb773974966d90"
+            ]
+        ]
+    },
+    {
+        "id": "3cb84a34cc7a9757",
+        "type": "debug",
+        "z": "50ed45470ea01d88",
+        "name": "",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "'Prompt: \"' & msg.payload & '\"'",
+        "targetType": "jsonata",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 1480,
+        "y": 1520,
+        "wires": []
+    },
+    {
+        "id": "84c4539458b06fde",
+        "type": "reusable",
+        "z": "50ed45470ea01d88",
+        "name": "",
+        "target": "basics:basic auth",
+        "outputs": 2,
+        "x": 1690,
+        "y": 1400,
+        "wires": [
+            [
+                "eb17f37faae8700d"
+            ],
+            [
+                "af159836912ee028"
+            ]
+        ],
+        "outputLabels": [
+            "authorized",
+            "unauthorized"
+        ]
+    },
+    {
+        "id": "af159836912ee028",
+        "type": "http response",
+        "z": "50ed45470ea01d88",
+        "name": "",
+        "statusCode": "",
+        "headers": {},
+        "x": 1850,
+        "y": 1400,
+        "wires": []
+    },
+    {
+        "id": "efdb773974966d90",
+        "type": "change",
+        "z": "50ed45470ea01d88",
+        "name": "400",
+        "rules": [
+            {
+                "t": "set",
+                "p": "statusCode",
+                "pt": "msg",
+                "to": "400",
+                "tot": "num"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 1850,
+        "y": 1500,
+        "wires": [
+            [
+                "af159836912ee028"
+            ]
+        ]
+    },
+    {
+        "id": "f82c27b884788eaf",
+        "type": "change",
+        "z": "50ed45470ea01d88",
+        "name": "200",
+        "rules": [
+            {
+                "t": "set",
+                "p": "statusCode",
+                "pt": "msg",
+                "to": "200",
+                "tot": "num"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 1850,
+        "y": 1460,
+        "wires": [
+            [
+                "af159836912ee028"
+            ]
+        ]
+    },
+    {
+        "id": "9a1ff75964be917c",
+        "type": "debug",
+        "z": "50ed45470ea01d88",
+        "name": "",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "'Response: \"' & msg.payload & '\"'",
+        "targetType": "jsonata",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 1680,
+        "y": 1540,
+        "wires": []
+    },
+    {
+        "id": "31bed00a3d885134",
+        "type": "comment",
+        "z": "50ed45470ea01d88",
+        "name": "cwd = server installation folder",
+        "info": "",
+        "x": 1770,
+        "y": 1340,
+        "wires": []
+    },
+    {
+        "id": "eb17f37faae8700d",
+        "type": "change",
+        "z": "50ed45470ea01d88",
+        "name": "parse query",
+        "rules": [
+            {
+                "t": "set",
+                "p": "payload",
+                "pt": "msg",
+                "to": "req.query.prompt",
+                "tot": "msg"
+            },
+            {
+                "t": "set",
+                "p": "threads",
+                "pt": "msg",
+                "to": "req.query.threads",
+                "tot": "msg"
+            },
+            {
+                "t": "set",
+                "p": "model",
+                "pt": "msg",
+                "to": "req.query.model",
+                "tot": "msg"
+            },
+            {
+                "t": "set",
+                "p": "context",
+                "pt": "msg",
+                "to": "req.query.context",
+                "tot": "msg"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 1450,
+        "y": 1460,
+        "wires": [
+            [
+                "3cb84a34cc7a9757",
+                "5f40be3d2f87e296"
+            ]
+        ]
+    }
+]
